@@ -1,0 +1,101 @@
+name: Build Pixel 9 Pro XL (Android 16) GKI Kernel
+
+on:
+  workflow_dispatch:
+    inputs:
+      ACK_BRANCH:
+        description: 'Google ACK 源码分支 (适配 Android 16)'
+        required: true
+        default: 'android15-6.1' # Pixel 9 系列跨 Android 15/16 均运行在 android15-6.1 KMI 基线上
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 1. 清理与配置 Ubuntu 编译环境
+        run: |
+          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/*
+          sudo apt-get update
+          sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip
+          
+      - name: 2. 拉取 Google 官方 ACK 内核源码 (Android 16 兼容)
+        run: |
+          # 仅拉取与 Pixel 9 Pro XL Android 16 补丁包对齐的 6.1 通用内核源码
+          git clone --depth=1 -b ${{ github.event.inputs.ACK_BRANCH }} https://android.googlesource.com/kernel/common android-kernel
+          echo "ACK Commit ID: $(cd android-kernel && git rev-parse HEAD)"
+
+      - name: 3. 集成 KernelSU-Next (锁定最新 Release 稳定版)
+        run: |
+          cd android-kernel
+          # 拉取 KernelSU-Next 官方仓库
+          git clone https://github.com/riffraff87/KernelSU-Next.git KernelSU-Next
+          cd KernelSU-Next
+          # 自动获取并切换到最新的 Stable Tag (排除 -next / -rc 等开发版本)
+          LATEST_STABLE_TAG=$(git tag -l | grep -v 'next' | grep -v 'rc' | sort -V | tail -n1)
+          echo "检测到的 KernelSU-Next 最新稳定版 Tag: $LATEST_STABLE_TAG"
+          git checkout $LATEST_STABLE_TAG
+          cd ..
+          
+          # 执行 KSU 官方源码级挂载
+          curl -LSs "https://raw.githubusercontent.com/riffraff87/KernelSU-Next/$LATEST_STABLE_TAG/kernel/setup.sh" | bash -s $LATEST_STABLE_TAG
+
+      - name: 4. 打入 SUSFS 补丁 (锁定最新 Stable Patch)
+        run: |
+          cd android-kernel
+          # 克隆 SUSFS 官方仓库
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
+          cd susfs
+          # 切换至最新的稳定版 Tag
+          SUSFS_STABLE_TAG=$(git tag -l | sort -V | tail -n1)
+          echo "检测到的 SUSFS 最新稳定版 Tag: $SUSFS_STABLE_TAG"
+          git checkout $SUSFS_STABLE_TAG
+          cd ..
+
+          # 将 SUSFS 内核层头文件与核心逻辑覆盖复制至内核源码树
+          cp -r susfs/kernel_patches/include/linux/* include/linux/
+          cp -r susfs/kernel_patches/fs/* fs/
+          
+          # 在 Linux 核心 defconfig 中显式开启 SUSFS 与 KSU 配置支持
+          echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
+          echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
+
+      - name: 5. 获取 Google 原厂 Clang 编译器并编译 Kernel
+        run: |
+          # 克隆 AOSP 预编译的 Clang 18 编译工具链
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
+          
+          export PATH=$(pwd)/llvm-clang/clang-r510928/bin:$PATH
+          cd android-kernel
+          
+          # 建立标准 GKI 环境变量编译
+          export ARCH=arm64
+          export SUBARCH=arm64
+          export CROSS_COMPILE=aarch64-linux-gnu-
+          export LLVM=1
+          export LLVM_IAS=1
+          
+          # 1. 载入大众标准 gki_defconfig 配置文件
+          make O=out gki_defconfig
+          # 2. 执行多核并行编译生成二进制 Image
+          make -j$(nproc) O=out Image
+
+      - name: 6. 利用 magiskboot 封装生成 boot.img
+        run: |
+          # 拉取工具打包标准 boot.img
+          git clone --depth=1 https://github.com/magiskboot/magiskboot-build.git tools
+          chmod +x tools/magiskboot
+          
+          # 提取 Image 文件并打包
+          cp android-kernel/out/arch/arm64/boot/Image ./
+          
+          # 构建可直接刷入的 ZIP AnyKernel3 / boot 压缩文件
+          zip -r9 Pixel9ProXL-GKI-KSU-SUSFS.zip Image
+
+      - name: 7. 上传编译产物到 Github Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pixel9ProXL-Android16-GKI-Kernel
+          path: |
+            Image
+            Pixel9ProXL-GKI-KSU-SUSFS.zip
