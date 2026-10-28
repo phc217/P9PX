@@ -17,12 +17,11 @@ jobs:
         run: |
           git clone --depth=1 -b android14-6.1 https://android.googlesource.com/kernel/common android-kernel
 
-      - name: 3. 集成 KernelSU-Next
+      - name: 3. 集成 KernelSU-Next (官方仓库)
         run: |
           cd android-kernel
-          # 直接 clone 源码并建立驱动软链接，彻底避免 curl 404 报错
-          git clone --depth=1 https://github.com/riffraff87/KernelSU-Next.git KernelSU-Next
-          ln -sf $(pwd)/KernelSU-Next/kernel drivers/kernelsu
+          # 修正为 KernelSU-Next 官方组织仓库地址，直接注入 drivers 目录
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           echo 'obj-y += kernelsu/' >> drivers/Makefile
 
@@ -44,7 +43,7 @@ jobs:
         run: |
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           
-          # 动态获取下载到的 Clang 版本路径
+          # 动态获取 Clang 编译器路径
           CLANG_PATH=$(ls -d $(pwd)/llvm-clang/clang-r* | tail -n 1)
           export PATH=$CLANG_PATH/bin:$PATH
           
