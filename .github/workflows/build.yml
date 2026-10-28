@@ -7,9 +7,11 @@ jobs:
   build-kernel:
     runs-on: ubuntu-22.04
     steps:
-      - name: 1. 清理与配置 Ubuntu 编译环境
+      - name: 1. 清理与释放 Ubuntu 磁盘空间及配置环境
         run: |
-          sudo rm -rf /usr/share/dotnet /etc/apt/sources.list.d/*
+          # 强力清理虚拟机预装的无用大型软件，释放 30GB+ 空间
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update
           sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip
 
@@ -17,10 +19,9 @@ jobs:
         run: |
           git clone --depth=1 -b android14-6.1 https://android.googlesource.com/kernel/common android-kernel
 
-      - name: 3. 集成 KernelSU-Next (官方仓库)
+      - name: 3. 集成 KernelSU-Next
         run: |
           cd android-kernel
-          # 修正为 KernelSU-Next 官方组织仓库地址，直接注入 drivers 目录
           git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           echo 'obj-y += kernelsu/' >> drivers/Makefile
@@ -39,13 +40,18 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 下载 Google 官方 Clang 工具链并编译 Kernel
+      - name: 5. 稀疏检出仅需要的 Clang 编译器并编译 Kernel
         run: |
-          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
+          # 使用 sparse-checkout 只精准下载 clang-r510928，避免塞爆磁盘
+          mkdir llvm-clang && cd llvm-clang
+          git init
+          git remote add origin https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
+          git config core.sparseCheckout true
+          echo "clang-r510928" >> .git/info/sparse-checkout
+          git pull --depth=1 origin main
+          cd ..
           
-          # 动态获取 Clang 编译器路径
-          CLANG_PATH=$(ls -d $(pwd)/llvm-clang/clang-r* | tail -n 1)
-          export PATH=$CLANG_PATH/bin:$PATH
+          export PATH=$(pwd)/llvm-clang/clang-r510928/bin:$PATH
           
           cd android-kernel
           
