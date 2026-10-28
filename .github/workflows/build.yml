@@ -15,14 +15,16 @@ jobs:
 
       - name: 2. 拉取 Google 官方 ACK 内核源码 (GKI 6.1 适配 Pixel 9 Pro XL)
         run: |
-          # 修正为 Google 官方标准的 android14-6.1 GKI 分支
           git clone --depth=1 -b android14-6.1 https://android.googlesource.com/kernel/common android-kernel
 
       - name: 3. 集成 KernelSU-Next
         run: |
           cd android-kernel
-          # 自动注入 KernelSU-Next 源码与内核 Hook
-          curl -LSs "https://raw.githubusercontent.com/riffraff87/KernelSU-Next/next/kernel/setup.sh" | bash -s next
+          # 直接 clone 源码并建立驱动软链接，彻底避免 curl 404 报错
+          git clone --depth=1 https://github.com/riffraff87/KernelSU-Next.git KernelSU-Next
+          ln -sf $(pwd)/KernelSU-Next/kernel drivers/kernelsu
+          echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
+          echo 'obj-y += kernelsu/' >> drivers/Makefile
 
       - name: 4. 打入 SUSFS 稳定版补丁与配置
         run: |
@@ -42,7 +44,10 @@ jobs:
         run: |
           git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           
-          export PATH=$(pwd)/llvm-clang/clang-r510928/bin:$PATH
+          # 动态获取下载到的 Clang 版本路径
+          CLANG_PATH=$(ls -d $(pwd)/llvm-clang/clang-r* | tail -n 1)
+          export PATH=$CLANG_PATH/bin:$PATH
+          
           cd android-kernel
           
           export ARCH=arm64
