@@ -12,7 +12,8 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update
-          sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip lld patch libncurses6 libtinfo6 wget curl
+          # 【修复】追加 dwarves 软件包以提供 pahole 工具
+          sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip lld patch libncurses6 libtinfo6 wget curl dwarves
 
           # 安装 Ubuntu 官方原生 libtinfo5 与 libncurses5，彻底解决 llvm-nm 运行依赖
           wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.2-0ubuntu2_amd64.deb
@@ -48,7 +49,7 @@ jobs:
             patch -p1 < "$KPATH" || true
           fi
 
-          # 3. 【重点修复】严格且仅应用 KernelSU-Next 代码 Patch，防误伤
+          # 3. 严格且仅应用 KernelSU-Next 代码 Patch，防误伤
           KSUPATH=$(find susfs/ -type f -iname "*next*.patch" | head -n 1)
           if [ -f "$KSUPATH" ]; then
             echo "Applying KSU-Next Patch: $KSUPATH"
