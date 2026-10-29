@@ -78,7 +78,8 @@ jobs:
           
           make O=out gki_defconfig
           
-          # 实时保存编译日志，若编译失败自动提取并高亮显示真正的 C 语言报错行
+          # 开启 pipefail 强行捕捉管道中的 make 编译错误
+          set -o pipefail
           if ! make -j$(nproc) O=out Image 2>&1 | tee build.log; then
             echo "=================== 真正报错的 C 语言代码行如下 ==================="
             grep -i -E "error:|fatal error:" build.log | head -n 30
@@ -86,10 +87,18 @@ jobs:
             exit 1
           fi
 
-      - name: 6. 打包成品内核
+      - name: 6. 查找并打包成品内核
         run: |
-          cp android-kernel/out/arch/arm64/boot/Image ./
-          zip -r9 Pixel9ProXL-Android16-GKI-KSU-SUSFS.zip Image
+          # 智能搜索生成的 Image 镜像文件路径
+          IMAGE_PATH=$(find android-kernel -name "Image" -type f | head -n 1)
+          if [ -n "$IMAGE_PATH" ]; then
+            echo "找到内核镜像路径: $IMAGE_PATH"
+            cp "$IMAGE_PATH" ./Image
+            zip -r9 Pixel9ProXL-Android16-GKI-KSU-SUSFS.zip Image
+          else
+            echo "未在产物目录中找到 Image 文件！"
+            exit 1
+          fi
 
       - name: 7. 上传编译产物
         uses: actions/upload-artifact@v4
