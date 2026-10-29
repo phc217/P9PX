@@ -65,24 +65,19 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
+      - name: 5. Cone 模式精确稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          # 使用 cone 模式 + FETCH_HEAD 强行解压并写盘
-          mkdir -p llvm-clang
+          # 原生 Git sparse clone + cone 模式拉取 clang-r510928
+          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
-          git init
-          git remote add origin https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
-          git sparse-checkout init --cone
-          git sparse-checkout set clang-r510928
-          git fetch --depth=1 origin main
-          git checkout FETCH_HEAD
+          git sparse-checkout set --cone clang-r510928
           cd ..
           
           CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
           CLANG_LIB="$(pwd)/llvm-clang/clang-r510928/lib64"
           
           if [ ! -f "$CLANG_BIN/llvm-nm" ]; then
-            echo "错误：未能在目标路径找到 llvm-nm！解压文件列表如下："
+            echo "错误：未能在目标路径找到 llvm-nm！解压目录如下："
             ls -la llvm-clang/
             exit 1
           fi
