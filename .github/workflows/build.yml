@@ -14,7 +14,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip lld patch libncurses6 libtinfo6 wget
 
-          # 彻底解决 llvm-nm 崩溃：直接安装 Ubuntu 官方原生 libtinfo5 和 libncurses5 deb 包
+          # 安装 Ubuntu 官方原生 libtinfo5 与 libncurses5，彻底解决 llvm-nm 运行依赖
           wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.2-0ubuntu2_amd64.deb
           wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libncurses5_6.2-0ubuntu2_amd64.deb
           sudo dpkg -i libtinfo5_6.2-0ubuntu2_amd64.deb libncurses5_6.2-0ubuntu2_amd64.deb || sudo apt-get -f install -y
@@ -65,10 +65,10 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
+      - name: 5. 高效稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          # 完整检出 clang-r510928 文件夹，防止文件不完整或损毁
-          git clone --depth=1 --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
+          # 带上 --filter=blob:none 实现高速、低占用的精准检出
+          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
           git sparse-checkout set clang-r510928
           cd ..
@@ -76,10 +76,14 @@ jobs:
           CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
           CLANG_LIB="$(pwd)/llvm-clang/clang-r510928/lib64"
           
+          if [ ! -f "$CLANG_BIN/llvm-nm" ]; then
+            echo "错误：未能在目标路径找到 llvm-nm，检出未成功！"
+            exit 1
+          fi
+          
           export PATH="$CLANG_BIN:$PATH"
           export LD_LIBRARY_PATH="$CLANG_LIB:$LD_LIBRARY_PATH"
           
-          # 工具链自检测试，确保 llvm-nm 能正常运行不段错误崩溃
           echo "=================== 工具链状态测试 ==================="
           "$CLANG_BIN/llvm-nm" --version
           echo "======================================================"
