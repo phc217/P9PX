@@ -29,37 +29,38 @@ jobs:
       - name: 4. 打入 SUSFS 稳定版补丁与配置
         run: |
           cd android-kernel
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
+          # 优先拉取 gki-android14-6.1 适配分支
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
           
-          # 1. 强行复制 SUSFS 核心头文件与 fs 源码
+          # 1. 复制 SUSFS 核心头文件与 fs 源码
           cp -r susfs/kernel_patches/include/linux/* include/linux/ 2>/dev/null || true
           cp -r susfs/kernel_patches/fs/* fs/ 2>/dev/null || true
 
-          # 2. 自动检索并应用 6.1 内核 Patch
+          # 2. 应用内核代码 Patch
           KPATH=$(find susfs/kernel_patches/ -name "*6.1*.patch" | head -n 1)
           if [ -f "$KPATH" ]; then
             echo "Applying Kernel Patch: $KPATH"
-            patch -p1 --fuzz=3 < "$KPATH" || true
+            patch -p1 < "$KPATH" || true
           fi
 
-          # 3. 自动检索并应用 KernelSU-Next Patch
-          KSUPATH=$(find susfs/ -name "*ksu*.patch" -o -name "*KernelSU*.patch" | head -n 1)
+          # 3. 应用 KernelSU-Next 代码 Patch
+          KSUPATH=$(find susfs/ -name "*ksu*.patch" -o -name "*KernelSU*.patch" -o -name "*next*.patch" | head -n 1)
           if [ -f "$KSUPATH" ]; then
             echo "Applying KSU Patch: $KSUPATH"
-            patch -p1 -d KernelSU-Next --fuzz=3 < "$KSUPATH" || true
+            patch -p1 -d KernelSU-Next < "$KSUPATH" || true
           fi
 
-          # 4. 补全 fs/Makefile
+          # 4. 补全 fs/Makefile 编译项
           if ! grep -q "susfs.o" fs/Makefile; then
             echo 'obj-$(CONFIG_KSU_SUSFS) += susfs.o' >> fs/Makefile
           fi
 
-          # 5. 写入内核配置参数
+          # 5. 写入内核宏开关
           echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 编译 Kernel 并精准捕获 C 语言报错
+      - name: 5. 编译 Kernel 并精准显示末尾日志
         run: |
           git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
@@ -78,18 +79,16 @@ jobs:
           
           make O=out gki_defconfig
           
-          # 开启 pipefail 强行捕捉管道中的 make 编译错误
           set -o pipefail
           if ! make -j$(nproc) O=out Image 2>&1 | tee build.log; then
-            echo "=================== 真正报错的 C 语言代码行如下 ==================="
-            grep -i -E "error:|fatal error:" build.log | head -n 30
-            echo "================================================================"
+            echo "=================== 编译失败！末尾 100 行关键错误日志如下 ==================="
+            tail -n 100 build.log
+            echo "========================================================================="
             exit 1
           fi
 
       - name: 6. 查找并打包成品内核
         run: |
-          # 智能搜索生成的 Image 镜像文件路径
           IMAGE_PATH=$(find android-kernel -name "Image" -type f | head -n 1)
           if [ -n "$IMAGE_PATH" ]; then
             echo "找到内核镜像路径: $IMAGE_PATH"
