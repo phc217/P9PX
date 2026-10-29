@@ -67,10 +67,11 @@ jobs:
 
       - name: 5. 高效稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          # 带上 --filter=blob:none 实现高速、低占用的精准检出
+          # 带上 --filter=blob:none 并使用 git checkout 完整写盘
           git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
           git sparse-checkout set clang-r510928
+          git checkout
           cd ..
           
           CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
