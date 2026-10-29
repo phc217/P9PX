@@ -12,11 +12,13 @@ jobs:
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update
-          sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip lld patch libncurses6 libtinfo6
-          
-          # 修复 Ubuntu 22.04 缺失旧版 libtinfo.so.5 / libncurses.so.5 导致 llvm-nm 崩溃的问题
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/libtinfo.so.6 /usr/lib/x86_64-linux-gnu/libtinfo.so.5 2>/dev/null || true
-          sudo ln -sf /usr/lib/x86_64-linux-gnu/libncurses.so.6 /usr/lib/x86_64-linux-gnu/libncurses.so.5 2>/dev/null || true
+          sudo apt-get install -y git ccache bison flex libssl-dev libelf-dev bc libncurses-dev zip lld patch libncurses6 libtinfo6 wget
+
+          # 彻底解决 llvm-nm 崩溃：直接安装 Ubuntu 官方原生 libtinfo5 和 libncurses5 deb 包
+          wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.2-0ubuntu2_amd64.deb
+          wget http://archive.ubuntu.com/ubuntu/pool/universe/n/ncurses/libncurses5_6.2-0ubuntu2_amd64.deb
+          sudo dpkg -i libtinfo5_6.2-0ubuntu2_amd64.deb libncurses5_6.2-0ubuntu2_amd64.deb || sudo apt-get -f install -y
+          rm -f *.deb
 
       - name: 2. 拉取 Google 官方 ACK 内核源码 (GKI 6.1 适配 Pixel 9 Pro XL)
         run: |
@@ -65,10 +67,10 @@ jobs:
 
       - name: 5. 稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
+          # 完整检出 clang-r510928 文件夹，防止文件不完整或损毁
+          git clone --depth=1 --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
           git sparse-checkout set clang-r510928
-          git checkout
           cd ..
           
           CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
@@ -77,6 +79,11 @@ jobs:
           export PATH="$CLANG_BIN:$PATH"
           export LD_LIBRARY_PATH="$CLANG_LIB:$LD_LIBRARY_PATH"
           
+          # 工具链自检测试，确保 llvm-nm 能正常运行不段错误崩溃
+          echo "=================== 工具链状态测试 ==================="
+          "$CLANG_BIN/llvm-nm" --version
+          echo "======================================================"
+
           cd android-kernel
           
           export ARCH=arm64
