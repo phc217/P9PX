@@ -29,7 +29,6 @@ jobs:
       - name: 4. 打入 SUSFS 稳定版补丁与配置
         run: |
           cd android-kernel
-          # 优先拉取 gki-android14-6.1 适配分支
           git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
           
           # 1. 复制 SUSFS 核心头文件与 fs 源码
@@ -60,7 +59,7 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 编译 Kernel 并精准显示末尾日志
+      - name: 5. 编译 Kernel（失败时自动切单线程 -j1 曝出精准错误）
         run: |
           git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
@@ -79,12 +78,12 @@ jobs:
           
           make O=out gki_defconfig
           
-          set -o pipefail
-          if ! make -j$(nproc) O=out Image 2>&1 | tee build.log; then
-            echo "=================== 编译失败！末尾 100 行关键错误日志如下 ==================="
-            tail -n 100 build.log
+          # 先用多线程加速编译；若报错，立刻切为单线程 (make -j1) 重新跑，错误行会定格在日志末尾
+          if ! make -j$(nproc) O=out Image; then
             echo "========================================================================="
-            exit 1
+            echo "多线程编译失败！正在切换为单线程 (make -j1) 精准捕获报错代码文件..."
+            echo "========================================================================="
+            make -j1 O=out Image
           fi
 
       - name: 6. 查找并打包成品内核
