@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: 1. 清理与释放 Ubuntu 磁盘空间及配置环境
         run: |
-          # 强力清理虚拟机预装无用软件，释放 30GB+ 空间
+          # 清理虚拟机预装无用软件，释放空间
           sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL /usr/local/share/boost
           sudo rm -rf /etc/apt/sources.list.d/*
           sudo apt-get update
@@ -22,7 +22,9 @@ jobs:
       - name: 3. 集成 KernelSU-Next
         run: |
           cd android-kernel
-          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git drivers/kernelsu
+          # 拉取源码并建立子目录软链接，修复 Kconfig 路径问题
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU-Next
+          ln -sf $(pwd)/KernelSU-Next/kernel drivers/kernelsu
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           echo 'obj-y += kernelsu/' >> drivers/Makefile
 
@@ -42,7 +44,7 @@ jobs:
 
       - name: 5. 精准稀疏检出 Clang 编译器并编译 Kernel
         run: |
-          # 使用现代 git sparse-checkout 完整拉取 clang-r510928 及其所有二进制工具
+          # 稀疏检出 clang-r510928 编译器
           git clone --depth=1 --filter=blob:none --sparse https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           cd llvm-clang
           git sparse-checkout set clang-r510928
