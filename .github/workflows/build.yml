@@ -65,15 +65,15 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 稳定稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
+      - name: 5. 精准递归检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          # 使用经典 Git 稀疏检出，以 clang-r510928/* 通配符确保拉取子目录全部文件
+          # 使用目录递归通配符 clang-r510928/ 确保完整拉取 bin/ 与 lib64/
           mkdir -p llvm-clang
           cd llvm-clang
           git init
           git remote add origin https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
           git config core.sparseCheckout true
-          echo "clang-r510928/*" >> .git/info/sparse-checkout
+          echo "clang-r510928/" > .git/info/sparse-checkout
           git pull --depth=1 origin main
           cd ..
           
@@ -81,7 +81,8 @@ jobs:
           CLANG_LIB="$(pwd)/llvm-clang/clang-r510928/lib64"
           
           if [ ! -f "$CLANG_BIN/llvm-nm" ]; then
-            echo "错误：未能在目标路径找到 llvm-nm，检出未成功！"
+            echo "错误：未能在目标路径找到 llvm-nm！解压文件列表如下："
+            ls -la llvm-clang/
             exit 1
           fi
           
