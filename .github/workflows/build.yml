@@ -65,16 +65,17 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 精准递归检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
+      - name: 5. 稀疏检出 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
         run: |
-          # 使用目录递归通配符 clang-r510928/ 确保完整拉取 bin/ 与 lib64/
+          # 使用 cone 模式 + FETCH_HEAD 强行解压并写盘
           mkdir -p llvm-clang
           cd llvm-clang
           git init
           git remote add origin https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86
-          git config core.sparseCheckout true
-          echo "clang-r510928/" > .git/info/sparse-checkout
-          git pull --depth=1 origin main
+          git sparse-checkout init --cone
+          git sparse-checkout set clang-r510928
+          git fetch --depth=1 origin main
+          git checkout FETCH_HEAD
           cd ..
           
           CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
