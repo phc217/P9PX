@@ -65,22 +65,25 @@ jobs:
           echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
           echo "CONFIG_KSU_SUSFS_HAS_MAGIC_MOUNT=y" >> arch/arm64/configs/gki_defconfig
 
-      - name: 5. 直链极速下载 Clang 并编译 Kernel（保留单线程 -j1 降级捕获）
+      - name: 5. 动态获取最新 Clang 并编译 Kernel（保留单线程降级捕获）
         run: |
-          # 使用 Google Source 归档接口直接拉取 clang-r510928 目录压缩包，15秒完成解压
-          mkdir -p llvm-clang/clang-r510928
-          curl -sL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/clang-r510928.tar.gz" -o clang.tar.gz
-          tar -xzf clang.tar.gz -C llvm-clang/clang-r510928/
-          rm -f clang.tar.gz
+          # 直接浅克隆整个工具链仓库，避开具体版本被删的 404 问题
+          git clone --depth=1 https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 llvm-clang
           
-          CLANG_BIN="$(pwd)/llvm-clang/clang-r510928/bin"
-          CLANG_LIB="$(pwd)/llvm-clang/clang-r510928/lib64"
+          # 自动匹配当前仓库中最新的 clang-rXXX 目录
+          CLANG_DIR=$(ls -d llvm-clang/clang-r* | grep -E "clang-r[0-9]+[a-z]?$" | sort -V | tail -n 1)
           
-          if [ ! -f "$CLANG_BIN/llvm-nm" ]; then
-            echo "错误：未能在目标路径找到 llvm-nm！解压目录内容如下："
-            ls -la llvm-clang/clang-r510928/
+          if [ -z "$CLANG_DIR" ]; then
+            echo "错误：未能在 llvm-clang 中找到任何有效的 Clang 目录！"
             exit 1
           fi
+          
+          echo "======================================================="
+          echo "成功匹配到 Google 官方最新 Clang 编译器：$CLANG_DIR"
+          echo "======================================================="
+          
+          CLANG_BIN="$(pwd)/$CLANG_DIR/bin"
+          CLANG_LIB="$(pwd)/$CLANG_DIR/lib64"
           
           export PATH="$CLANG_BIN:$PATH"
           export LD_LIBRARY_PATH="$CLANG_LIB:$LD_LIBRARY_PATH"
