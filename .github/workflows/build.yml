@@ -21,9 +21,9 @@ jobs:
           sudo dpkg -i libtinfo5_6.2-0ubuntu2_amd64.deb libncurses5_6.2-0ubuntu2_amd64.deb || sudo apt-get -f install -y
           rm -f *.deb
 
-      - name: 2. 拉取 Google 官方 ACK 内核源码 (GKI 6.1 适配 Android 15/16)
+      - name: 2. 拉取 Google 官方 ACK 内核源码 (Pixel 9 系列 Android 16 专属 6.1 分支)
         run: |
-          git clone --depth=1 -b android15-6.1 https://android.googlesource.com/kernel/common android-kernel
+          git clone --depth=1 -b android-gs-caimito-6.1-android16 https://android.googlesource.com/kernel/common android-kernel
 
       - name: 3. 集成 KernelSU-Next
         run: |
@@ -36,7 +36,7 @@ jobs:
       - name: 4. 严谨打入 SUSFS 稳定版补丁与配置
         run: |
           cd android-kernel
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
           
           # 1. 复制 SUSFS 核心头文件与 fs 源码
           cp -r susfs/kernel_patches/include/linux/* include/linux/ 2>/dev/null || true
