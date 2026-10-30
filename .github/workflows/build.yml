@@ -21,23 +21,14 @@ jobs:
           sudo dpkg -i libtinfo5_6.2-0ubuntu2_amd64.deb libncurses5_6.2-0ubuntu2_amd64.deb || sudo apt-get -f install -y
           rm -f *.deb
 
-      - name: 2. 拉取 Google 官方 ACK 内核源码 (GKI 6.1 适配 Pixel 9 Pro XL)
+      - name: 2. 拉取 Google 官方 ACK 内核源码 (GKI 6.1 适配 Android 15/16)
         run: |
-          git clone --depth=1 -b android14-6.1 https://android.googlesource.com/kernel/common android-kernel
+          git clone --depth=1 -b android15-6.1 https://android.googlesource.com/kernel/common android-kernel
 
-      - name: 3. 集成 KernelSU-Next (精准锁定 v3.4.2 稳定版)
+      - name: 3. 集成 KernelSU-Next
         run: |
           cd android-kernel
-          # 去掉 --depth=1 以便能拉取到完整的 Tag 记录
-          git clone https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU-Next
-          
-          # 核心修改：切换到 v3.4.2
-          cd KernelSU-Next
-          git fetch --tags
-          git checkout v3.4.2
-          cd ..
-
-          # 保留原有的软链接与路径写入方式
+          git clone --depth=1 https://github.com/KernelSU-Next/KernelSU-Next.git KernelSU-Next
           ln -sf $(pwd)/KernelSU-Next/kernel drivers/kernelsu
           echo 'source "drivers/kernelsu/Kconfig"' >> drivers/Kconfig
           echo 'obj-y += kernelsu/' >> drivers/Makefile
@@ -45,7 +36,7 @@ jobs:
       - name: 4. 严谨打入 SUSFS 稳定版补丁与配置
         run: |
           cd android-kernel
-          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android14-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
+          git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android15-6.1 susfs || git clone https://gitlab.com/simonpunk/susfs4ksu.git susfs
           
           # 1. 复制 SUSFS 核心头文件与 fs 源码
           cp -r susfs/kernel_patches/include/linux/* include/linux/ 2>/dev/null || true
