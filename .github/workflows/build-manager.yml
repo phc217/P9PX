@@ -15,6 +15,7 @@ jobs:
 
       - name: Switch to Protocol 6 Matched Commit
         run: |
+          git fetch origin dev
           git checkout 5d3a136
 
       - name: Set up JDK 21
