@@ -15,7 +15,7 @@ jobs:
 
       - name: Switch to Protocol 6 Matched Commit
         run: |
-          git config remote.origin.fetch "+refs/heads/*:refs/remotes/origin/*"
+          git config remote.origin.fetch "+refs/*:refs/*"
           git fetch origin
           git checkout 5d3a136
 
