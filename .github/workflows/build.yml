@@ -18,23 +18,25 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Set up Build Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd
 
+      - name: Download Kernel Source Code
+        run: |
+          # 假设这里是你原先拉取 Pixel 9 Pro XL 内核源码的步骤
+          # 例如: repo init / git clone ...
+          echo "Syncing/Cloning kernel source..."
+
       - name: Integrate KernelSU-Next (Lock to Latest Stable Release)
         run: |
-          # 精准查找包含 drivers/Makefile 的内核源码根目录
+          # 自动定位内核源码中的 drivers 目录
           MAKEFILE_PATH=$(find . -type f -path "*/drivers/Makefile" -not -path "*/.*" | head -n 1)
 
           if [ -z "$MAKEFILE_PATH" ]; then
-            echo "[ERROR] 未能定位到 drivers/ 目录，请检查仓库源码结构！"
-            echo "当前工作区一层文件目录结构如下："
-            ls -la
+            echo "[ERROR] 未能定位到 drivers/ 目录，请检查内核源码拉取步骤！"
             exit 1
           fi
 
@@ -42,35 +44,32 @@ jobs:
           echo "Targeting kernel root dir: $KERNEL_DIR"
           cd "$KERNEL_DIR"
 
-          # 1. 运行官方 setup 脚本将 KSU-Next 接入内核源码树
+          # 1. 运行官方 setup 脚本接入 KSU-Next
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -
 
-          # 2. 精准切换驱动至最新稳定 Release Tag (锁定 v3.4.2 / Protocol 5)
+          # 2. 精准锁定为最新稳定 Release Tag (v3.4.2 / Protocol 5)
           cd KernelSU-Next
           git fetch --tags
-
-          # 自动过滤 -rc / -dev 等后缀，提取最新正式稳定 Tag
           LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
           TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
 
           echo "Checkout KernelSU-Next Tag: $TARGET_TAG"
           git checkout $TARGET_TAG
 
-          # 退回 Actions 根目录
           cd "$GITHUB_WORKSPACE"
 
-      - name: Apply SUSFS & Custom Kernel Patches
+      - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 此处保持你原有的 SUSFS 补丁打入命令
+          # 原有的 SUSFS 打补丁命令
 
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 此处保持你原有的 GKI 内核编译命令
+          # 原有的 GKI 编译命令
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4 # 根据你实际产物路径配置
+          path: out/arch/arm64/boot/Image.lz4
