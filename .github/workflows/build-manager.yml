@@ -11,8 +11,11 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'KernelSU-Next/KernelSU-Next'
-          ref: '5d3a136'
           fetch-depth: 0
+
+      - name: Switch to Protocol 6 Matched Commit
+        run: |
+          git checkout 5d3a136
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
