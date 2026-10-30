@@ -28,17 +28,17 @@ jobs:
 
       - name: Integrate KernelSU-Next (Lock to Latest Stable Release)
         run: |
-          # 自动定位包含 drivers/ 目录的内核源码路径
-          if [ -d "drivers" ]; then
-            KERNEL_DIR="."
-          elif [ -d "common/drivers" ]; then
-            KERNEL_DIR="common"
-          elif [ -d "kernel/drivers" ]; then
-            KERNEL_DIR="kernel"
-          else
-            KERNEL_DIR=$(find . -maxdepth 2 -type d -name "drivers" | head -n 1 | xargs dirname)
+          # 精准查找包含 drivers/Makefile 的内核源码根目录
+          MAKEFILE_PATH=$(find . -type f -path "*/drivers/Makefile" -not -path "*/.*" | head -n 1)
+
+          if [ -z "$MAKEFILE_PATH" ]; then
+            echo "[ERROR] 未能定位到 drivers/ 目录，请检查仓库源码结构！"
+            echo "当前工作区一层文件目录结构如下："
+            ls -la
+            exit 1
           fi
 
+          KERNEL_DIR=$(dirname $(dirname "$MAKEFILE_PATH"))
           echo "Targeting kernel root dir: $KERNEL_DIR"
           cd "$KERNEL_DIR"
 
