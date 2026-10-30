@@ -26,38 +26,34 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd repo
 
-      # 3. 同步内核源码 (根据你实际编译 Pixel 9 Pro XL 的内核方式配置)
+      # 3. 同步内核源码
       - name: Sync Kernel Source
         run: |
-          # 示例：如果你的内核源码是以 git clone 或 repo 的方式拉取的，写在下面
-          # 如果之前你成功编译过内核，请在此处保留你原本下载内核源码的命令！
-          git clone https://android.googlesource.com/kernel/common -b android14-6.1 common || true
+          # 请确保此处写有你同步/下载内核源码至 common 目录的命令
+          echo "Syncing kernel source code into common directory..."
 
-      # 4. 集成 KernelSU-Next 并锁死最新稳定 Tag (v3.4.2 / Protocol 5)
+      # 4. 集成 KernelSU-Next 并锁死 v3.4.2 稳定版 (Protocol 5)
       - name: Integrate KernelSU-Next (Locked to Stable v3.4.2)
         run: |
-          # 独立克隆 KernelSU-Next 仓库并切换到 v3.4.2 稳定 Tag
+          # 独立克隆 KernelSU-Next 源码并切换至 v3.4.2 稳定 Tag
           git clone https://github.com/KernelSU-Next/KernelSU-Next.git KSU-Next-Source
           cd KSU-Next-Source
           git fetch --tags
           git checkout v3.4.2
           cd "$GITHUB_WORKSPACE"
 
-          # 自动寻找包含了 drivers/Makefile 的内核源码根目录
-          MAKEFILE_PATH=$(find . -type f -path "*/drivers/Makefile" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
+          # 明确指定内核根目录为 common
+          KERNEL_ROOT="common"
 
-          if [ -z "$MAKEFILE_PATH" ]; then
-            echo "=========================================================================="
-            echo "[ERROR] 未能找到 Linux 内核源码！"
-            echo "请检查第 3 步 'Sync Kernel Source' 是否配置了正确的内核源码拉取/下载命令。"
-            echo "=========================================================================="
+          if [ ! -d "$KERNEL_ROOT/drivers" ]; then
+            echo "[ERROR] 未能找到 $KERNEL_ROOT/drivers 目录！"
+            echo "请检查第 3 步是否配置了将内核源码拉取至 common 目录的命令。"
             exit 1
           fi
 
-          KERNEL_ROOT=$(dirname $(dirname "$MAKEFILE_PATH"))
-          echo "成功定位内核源码根目录: $KERNEL_ROOT"
+          echo "定位内核源码根目录: $KERNEL_ROOT"
 
-          # 将稳定版 KernelSU-Next 驱动源码注入内核 drivers/ksu 目录中
+          # 注入 KernelSU-Next v3.4.2 驱动源码
           mkdir -p "$KERNEL_ROOT/drivers/ksu"
           cp -r KSU-Next-Source/kernel/* "$KERNEL_ROOT/drivers/ksu/"
           rm -rf KSU-Next-Source
@@ -70,23 +66,23 @@ jobs:
             sed -i '/endmenu/i source "drivers/ksu/Kconfig"' "$KERNEL_ROOT/drivers/Kconfig"
           fi
 
-          echo "KernelSU-Next v3.4.2 已成功集成至内核驱动树！"
+          echo "KernelSU-Next v3.4.2 驱动已成功集成至 $KERNEL_ROOT/drivers/ksu ！"
 
       # 5. 应用 SUSFS 补丁
       - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 此处保留你原本的 SUSFS 打补丁脚本命令
+          # 保留你原本的 SUSFS 打补丁脚本命令
 
       # 6. 编译内核
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 此处保留你原本编译内核的命令
+          # 保留你原本编译 Pixel 9 Pro XL GKI 内核的命令
 
       # 7. 上传内核产物
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4
+          path: out/arch/arm64/boot/Image.lz4 # 替换为你实际编译产物的路径
