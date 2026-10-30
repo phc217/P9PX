@@ -22,34 +22,49 @@ jobs:
       - name: Set up Build Environment
         run: |
           sudo apt-get update
-          sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd
+          sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd repo
 
-      - name: Download Kernel Source Code
+      - name: Sync / Download Kernel Source
         run: |
-          # 假设这里是你原先拉取 Pixel 9 Pro XL 内核源码的步骤
-          # 例如: repo init / git clone ...
-          echo "Syncing/Cloning kernel source..."
+          echo "Syncing kernel source code..."
+          # 注意：请确保此处保留你原有的 repo init/sync 或 git clone 命令
+          # 如果你的内核源码直接就在仓库根目录， actions/checkout 已经下载完毕，可无视此段
 
       - name: Integrate KernelSU-Next (Lock to Latest Stable Release)
         run: |
-          # 自动定位内核源码中的 drivers 目录
-          MAKEFILE_PATH=$(find . -type f -path "*/drivers/Makefile" -not -path "*/.*" | head -n 1)
+          # 1. 打印工作区结构以便诊断
+          echo "=== 当前工作区目录结构 ==="
+          find . -maxdepth 3 -not -path '*/.*'
 
-          if [ -z "$MAKEFILE_PATH" ]; then
-            echo "[ERROR] 未能定位到 drivers/ 目录，请检查内核源码拉取步骤！"
+          # 2. 自动寻找包含 drivers 文件夹的内核源码根目录
+          KERNEL_DIR=""
+          if [ -d "drivers" ]; then
+            KERNEL_DIR="."
+          else
+            DRIVERS_PATH=$(find . -maxdepth 3 -type d -name "drivers" -not -path '*/.*' | head -n 1)
+            if [ -n "$DRIVERS_PATH" ]; then
+              KERNEL_DIR=$(dirname "$DRIVERS_PATH")
+            fi
+          fi
+
+          if [ -z "$KERNEL_DIR" ]; then
+            echo "======================================================="
+            echo "[ERROR] 工作区内未发现 drivers 目录！"
+            echo "请检查在上一步骤中内核源码是否成功下载到了 runner 空间。"
+            echo "======================================================="
             exit 1
           fi
 
-          KERNEL_DIR=$(dirname $(dirname "$MAKEFILE_PATH"))
-          echo "Targeting kernel root dir: $KERNEL_DIR"
+          echo "成功定位内核源码目录: $KERNEL_DIR"
           cd "$KERNEL_DIR"
 
-          # 1. 运行官方 setup 脚本接入 KSU-Next
+          # 3. 运行官方 setup 脚本接入 KSU-Next
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -
 
-          # 2. 精准锁定为最新稳定 Release Tag (v3.4.2 / Protocol 5)
+          # 4. 精准锁定为最新稳定 Release Tag (锁定 v3.4.2 / Protocol 5)
           cd KernelSU-Next
           git fetch --tags
+          
           LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
           TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
 
@@ -61,15 +76,15 @@ jobs:
       - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 原有的 SUSFS 打补丁命令
+          # 保留你原本的 SUSFS 补丁命令
 
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 原有的 GKI 编译命令
+          # 保留你原本的 Pixel 9 Pro XL / GKI 编译命令
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4
+          path: out/arch/arm64/boot/Image.lz4 # 根据你原先打包成功的实际产物路径填写
