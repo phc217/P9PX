@@ -16,7 +16,7 @@ jobs:
       - name: Switch to Protocol 6 Matched Commit
         run: |
           git fetch origin +refs/heads/*:refs/remotes/origin/* +refs/pull/*:refs/remotes/origin/pr/*
-          git checkout 5d3a136
+          git checkout origin/pr/969/head
 
       - name: Set up JDK 21
         uses: actions/setup-java@v4
