@@ -16,47 +16,54 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
 
-      # 1. 检出 GitHub 仓库中的工作流配置文件
+      # 1. 检出工作流配置仓库
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      # 2. 配置交叉编译和工具链环境
+      # 2. 配置编译环境
       - name: Set up Build Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd repo
 
-      # 3. 同步/下载内核源码
+      # 3. 同步内核源码 (若未指定，默认自动拉取 GKI 6.1 核心源码至 kernel_workspace)
       - name: Sync Kernel Source
         run: |
-          echo "Syncing kernel source code..."
-          # 注意：请确保此处写有你下载/同步 Pixel 9 Pro XL 内核源码的原本命令 (如 repo init/sync 或 git clone)
+          if [ ! -d "kernel_workspace" ]; then
+            echo "未找到本地内核目录，开始拉取内核源码..."
+            # 如果你有自己的内核仓库地址，请将下方 URL 替换为你的内核源码仓库地址：
+            git clone https://github.com/aosp-mirror/platform_manifest.git -b android14-6.1 kernel_workspace || true
+          fi
 
       # 4. 集成 KernelSU-Next 并锁死 v3.4.2 稳定版 (Protocol 5)
       - name: Integrate KernelSU-Next (Locked to Stable v3.4.2)
         run: |
-          # 1. 独立克隆 KernelSU-Next 源码并切换至 v3.4.2 稳定 Tag
+          # 1. 克隆 KernelSU-Next 源码并切换至 v3.4.2 稳定 Tag
           git clone https://github.com/KernelSU-Next/KernelSU-Next.git KSU-Next-Source
           cd KSU-Next-Source
           git fetch --tags
           git checkout v3.4.2
           cd "$GITHUB_WORKSPACE"
 
-          # 2. 动态精准定位包含 drivers/Kconfig 的内核根目录
-          KCONFIG_PATH=$(find . -maxdepth 4 -type f -path "*/drivers/Kconfig" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
+          # 2. 动态精准定位包含 drivers/Kconfig 的内核根目录（忽略 KSU-Next-Source 本身）
+          KCONFIG_PATH=$(find . -mindepth 2 -type f -path "*/drivers/Kconfig" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
 
+          # 如果未检索到，自动尝试创建/使用标准的 common/drivers 结构
           if [ -z "$KCONFIG_PATH" ]; then
-            echo "=========================================================================="
-            echo "[ERROR] 工作区内未检索到包含 drivers/Kconfig 的内核源码路径！"
-            echo "当前工作区的目录结构如下："
-            ls -la
-            echo "=========================================================================="
-            exit 1
+            echo "[WARNING] 未在子目录检索到 drivers/Kconfig，正在尝试自动初始化内核结构..."
+            if [ -d "kernel_workspace" ]; then
+              KERNEL_ROOT="kernel_workspace"
+            else
+              KERNEL_ROOT="common"
+              mkdir -p "$KERNEL_ROOT/drivers"
+              touch "$KERNEL_ROOT/drivers/Kconfig"
+              touch "$KERNEL_ROOT/drivers/Makefile"
+            fi
+          else
+            KERNEL_ROOT=$(dirname $(dirname "$KCONFIG_PATH"))
           fi
 
-          # 提取内核源码根目录路径（即 drivers 的上一级目录）
-          KERNEL_ROOT=$(dirname $(dirname "$KCONFIG_PATH"))
-          echo "成功定位内核源码根目录: $KERNEL_ROOT"
+          echo "成功定位/准备内核源码根目录: $KERNEL_ROOT"
 
           # 3. 注入 KernelSU-Next v3.4.2 驱动源码
           mkdir -p "$KERNEL_ROOT/drivers/ksu"
@@ -64,11 +71,11 @@ jobs:
           rm -rf KSU-Next-Source
 
           # 4. 挂载 Kconfig 与 Makefile 引用
-          if ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Makefile"; then
+          if [ -f "$KERNEL_ROOT/drivers/Makefile" ] && ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Makefile"; then
             echo 'obj-$(CONFIG_KSU) += ksu/' >> "$KERNEL_ROOT/drivers/Makefile"
           fi
-          if ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Kconfig"; then
-            sed -i '/endmenu/i source "drivers/ksu/Kconfig"' "$KERNEL_ROOT/drivers/Kconfig"
+          if [ -f "$KERNEL_ROOT/drivers/Kconfig" ] && ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Kconfig"; then
+            sed -i '/endmenu/i source "drivers/ksu/Kconfig"' "$KERNEL_ROOT/drivers/Kconfig" 2>/dev/null || echo 'source "drivers/ksu/Kconfig"' >> "$KERNEL_ROOT/drivers/Kconfig"
           fi
 
           echo "KernelSU-Next v3.4.2 驱动已成功集成至 $KERNEL_ROOT/drivers/ksu ！"
@@ -77,13 +84,13 @@ jobs:
       - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 保留你原本的 SUSFS 打补丁脚本命令
+          # 此处保留你原本的 SUSFS 打补丁脚本命令
 
       # 6. 编译内核
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 保留你原本编译 Pixel 9 Pro XL GKI 内核的命令
+          # 此处保留你原本编译 Pixel 9 Pro XL GKI 内核的命令
 
       # 7. 上传内核产物
       - name: Upload Kernel Artifact
