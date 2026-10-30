@@ -18,6 +18,8 @@ jobs:
 
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Build Environment
         run: |
@@ -26,33 +28,49 @@ jobs:
 
       - name: Integrate KernelSU-Next (Lock to Latest Stable Release)
         run: |
-          # 1. 运行官方 setup 脚本拉取基础驱动源码
+          # 自动定位包含 drivers/ 目录的内核源码路径
+          if [ -d "drivers" ]; then
+            KERNEL_DIR="."
+          elif [ -d "common/drivers" ]; then
+            KERNEL_DIR="common"
+          elif [ -d "kernel/drivers" ]; then
+            KERNEL_DIR="kernel"
+          else
+            KERNEL_DIR=$(find . -maxdepth 2 -type d -name "drivers" | head -n 1 | xargs dirname)
+          fi
+
+          echo "Targeting kernel root dir: $KERNEL_DIR"
+          cd "$KERNEL_DIR"
+
+          # 1. 运行官方 setup 脚本将 KSU-Next 接入内核源码树
           curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -
-          
-          # 2. 精准切换到最新稳定 Tag (避免拉到 dev/开发版驱动)
+
+          # 2. 精准切换驱动至最新稳定 Release Tag (锁定 v3.4.2 / Protocol 5)
           cd KernelSU-Next
           git fetch --tags
-          
-          # 自动筛选去除 -rc/-dev 等预发布后缀的最新稳定版本 (当前为 v3.4.2)
+
+          # 自动过滤 -rc / -dev 等后缀，提取最新正式稳定 Tag
           LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
           TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
-          
-          echo "Targeting KernelSU-Next Stable Tag: $TARGET_TAG"
+
+          echo "Checkout KernelSU-Next Tag: $TARGET_TAG"
           git checkout $TARGET_TAG
-          cd ..
+
+          # 退回 Actions 根目录
+          cd "$GITHUB_WORKSPACE"
 
       - name: Apply SUSFS & Custom Kernel Patches
         run: |
-          # 此处保留你之前调试好的 SUSFS 补丁打入命令
           echo "Applying SUSFS patches..."
+          # 此处保持你原有的 SUSFS 补丁打入命令
 
       - name: Compile Kernel
         run: |
-          # 此处保留你之前调试好的 GKI / Pixel 9 Pro XL 内核编译命令
           echo "Compiling Kernel..."
+          # 此处保持你原有的 GKI 内核编译命令
 
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4 # 根据你之前的产物路径匹配
+          path: out/arch/arm64/boot/Image.lz4 # 根据你实际产物路径配置
