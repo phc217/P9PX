@@ -16,55 +16,53 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
 
-      # 1. 检出你自己的内核编译配置仓库
+      # 1. 检出工作流配置仓库
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
+      # 2. 配置编译环境
       - name: Set up Build Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd repo
 
-      # 2. 如果你的内核源码是通过 Git / Repo 另外拉取的，在这里放置下载命令
+      # 3. 同步内核源码 (根据你实际编译 Pixel 9 Pro XL 的内核方式配置)
       - name: Sync Kernel Source
         run: |
-          echo "如果你的内核源码需要额外 git clone，请在此步骤执行；如果是直接放在仓库里，此步骤可留空。"
+          # 示例：如果你的内核源码是以 git clone 或 repo 的方式拉取的，写在下面
+          # 如果之前你成功编译过内核，请在此处保留你原本下载内核源码的命令！
+          git clone https://android.googlesource.com/kernel/common -b android14-6.1 common || true
 
-      # 3. 集成 KernelSU-Next 并锁死最新稳定 Tag (v3.4.2 / Protocol 5)
+      # 4. 集成 KernelSU-Next 并锁死最新稳定 Tag (v3.4.2 / Protocol 5)
       - name: Integrate KernelSU-Next (Locked to Stable v3.4.2)
         run: |
-          # 独立克隆 KernelSU-Next 仓库并切换到最新稳定 Release Tag
+          # 独立克隆 KernelSU-Next 仓库并切换到 v3.4.2 稳定 Tag
           git clone https://github.com/KernelSU-Next/KernelSU-Next.git KSU-Next-Source
           cd KSU-Next-Source
           git fetch --tags
-          
-          # 过滤获取最新正式稳定 Tag (排除 -rc / -dev)
-          LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
-          TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
-          echo "Targeting KernelSU-Next Stable Tag: $TARGET_TAG"
-          git checkout $TARGET_TAG
-          cd ..
+          git checkout v3.4.2
+          cd "$GITHUB_WORKSPACE"
 
-          # 定位内核 drivers 目录所在的位置
-          DRIVERS_DIR=$(find . -maxdepth 4 -type d -name "drivers" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
-          
-          if [ -z "$DRIVERS_DIR" ]; then
-            echo "[ERROR] 未能找到 Linux 内核的 drivers 目录！"
-            echo "请确保在运行此步骤之前，内核源码已经成功克隆/同步到工作区中。"
+          # 自动寻找包含了 drivers/Makefile 的内核源码根目录
+          MAKEFILE_PATH=$(find . -type f -path "*/drivers/Makefile" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
+
+          if [ -z "$MAKEFILE_PATH" ]; then
+            echo "=========================================================================="
+            echo "[ERROR] 未能找到 Linux 内核源码！"
+            echo "请检查第 3 步 'Sync Kernel Source' 是否配置了正确的内核源码拉取/下载命令。"
+            echo "=========================================================================="
             exit 1
           fi
 
-          KERNEL_ROOT=$(dirname "$DRIVERS_DIR")
-          echo "内核源码根目录为: $KERNEL_ROOT"
+          KERNEL_ROOT=$(dirname $(dirname "$MAKEFILE_PATH"))
+          echo "成功定位内核源码根目录: $KERNEL_ROOT"
 
-          # 将稳定版 KernelSU-Next 源码复制到内核 drivers/ksu 目录中
+          # 将稳定版 KernelSU-Next 驱动源码注入内核 drivers/ksu 目录中
           mkdir -p "$KERNEL_ROOT/drivers/ksu"
           cp -r KSU-Next-Source/kernel/* "$KERNEL_ROOT/drivers/ksu/"
           rm -rf KSU-Next-Source
 
-          # 配置 Kconfig 与 Makefile 引用
+          # 挂载 Kconfig 与 Makefile 引用
           if ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Makefile"; then
             echo 'obj-$(CONFIG_KSU) += ksu/' >> "$KERNEL_ROOT/drivers/Makefile"
           fi
@@ -72,23 +70,23 @@ jobs:
             sed -i '/endmenu/i source "drivers/ksu/Kconfig"' "$KERNEL_ROOT/drivers/Kconfig"
           fi
 
-          echo "KernelSU-Next ($TARGET_TAG) 已成功集成至内核驱动树！"
+          echo "KernelSU-Next v3.4.2 已成功集成至内核驱动树！"
 
-      # 4. 应用 SUSFS 补丁
+      # 5. 应用 SUSFS 补丁
       - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 此处放置你原本的 SUSFS 打补丁脚本命令
+          # 此处保留你原本的 SUSFS 打补丁脚本命令
 
-      # 5. 编译内核
+      # 6. 编译内核
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 此处放置你原本的 Pixel 9 Pro XL GKI 内核编译命令
+          # 此处保留你原本编译内核的命令
 
-      # 6. 上传内核产物
+      # 7. 上传内核产物
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4 # 替换为你实际编译产物的路径
+          path: out/arch/arm64/boot/Image.lz4
