@@ -11,6 +11,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: 'KernelSU-Next/KernelSU-Next'
+          ref: '5d3a136'
           fetch-depth: 0
 
       - name: Set up JDK 21
@@ -31,5 +32,5 @@ jobs:
       - name: Upload Manager APK
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU-Next-Manager-Protocol6
+          name: KernelSU-Next-Manager-Protocol6-Matched
           path: manager/app/build/outputs/apk/release/*.apk
