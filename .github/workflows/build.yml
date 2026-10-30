@@ -16,75 +16,79 @@ jobs:
           remove-android: 'true'
           remove-haskell: 'true'
 
+      # 1. 检出你自己的内核编译配置仓库
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Build Environment
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential libncurses-dev bison flex libssl-dev libelf-dev zstd repo
 
-      - name: Sync / Download Kernel Source
+      # 2. 如果你的内核源码是通过 Git / Repo 另外拉取的，在这里放置下载命令
+      - name: Sync Kernel Source
         run: |
-          echo "Syncing kernel source code..."
-          # 注意：请确保此处保留你原有的 repo init/sync 或 git clone 命令
-          # 如果你的内核源码直接就在仓库根目录， actions/checkout 已经下载完毕，可无视此段
+          echo "如果你的内核源码需要额外 git clone，请在此步骤执行；如果是直接放在仓库里，此步骤可留空。"
 
-      - name: Integrate KernelSU-Next (Lock to Latest Stable Release)
+      # 3. 集成 KernelSU-Next 并锁死最新稳定 Tag (v3.4.2 / Protocol 5)
+      - name: Integrate KernelSU-Next (Locked to Stable v3.4.2)
         run: |
-          # 1. 打印工作区结构以便诊断
-          echo "=== 当前工作区目录结构 ==="
-          find . -maxdepth 3 -not -path '*/.*'
+          # 独立克隆 KernelSU-Next 仓库并切换到最新稳定 Release Tag
+          git clone https://github.com/KernelSU-Next/KernelSU-Next.git KSU-Next-Source
+          cd KSU-Next-Source
+          git fetch --tags
+          
+          # 过滤获取最新正式稳定 Tag (排除 -rc / -dev)
+          LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
+          TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
+          echo "Targeting KernelSU-Next Stable Tag: $TARGET_TAG"
+          git checkout $TARGET_TAG
+          cd ..
 
-          # 2. 自动寻找包含 drivers 文件夹的内核源码根目录
-          KERNEL_DIR=""
-          if [ -d "drivers" ]; then
-            KERNEL_DIR="."
-          else
-            DRIVERS_PATH=$(find . -maxdepth 3 -type d -name "drivers" -not -path '*/.*' | head -n 1)
-            if [ -n "$DRIVERS_PATH" ]; then
-              KERNEL_DIR=$(dirname "$DRIVERS_PATH")
-            fi
-          fi
-
-          if [ -z "$KERNEL_DIR" ]; then
-            echo "======================================================="
-            echo "[ERROR] 工作区内未发现 drivers 目录！"
-            echo "请检查在上一步骤中内核源码是否成功下载到了 runner 空间。"
-            echo "======================================================="
+          # 定位内核 drivers 目录所在的位置
+          DRIVERS_DIR=$(find . -maxdepth 4 -type d -name "drivers" -not -path "*/KSU-Next-Source/*" -not -path "*/.*" | head -n 1)
+          
+          if [ -z "$DRIVERS_DIR" ]; then
+            echo "[ERROR] 未能找到 Linux 内核的 drivers 目录！"
+            echo "请确保在运行此步骤之前，内核源码已经成功克隆/同步到工作区中。"
             exit 1
           fi
 
-          echo "成功定位内核源码目录: $KERNEL_DIR"
-          cd "$KERNEL_DIR"
+          KERNEL_ROOT=$(dirname "$DRIVERS_DIR")
+          echo "内核源码根目录为: $KERNEL_ROOT"
 
-          # 3. 运行官方 setup 脚本接入 KSU-Next
-          curl -LSs https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh | bash -
+          # 将稳定版 KernelSU-Next 源码复制到内核 drivers/ksu 目录中
+          mkdir -p "$KERNEL_ROOT/drivers/ksu"
+          cp -r KSU-Next-Source/kernel/* "$KERNEL_ROOT/drivers/ksu/"
+          rm -rf KSU-Next-Source
 
-          # 4. 精准锁定为最新稳定 Release Tag (锁定 v3.4.2 / Protocol 5)
-          cd KernelSU-Next
-          git fetch --tags
-          
-          LATEST_STABLE_TAG=$(git tag -l "v*" | grep -v "-" | sort -V | tail -n 1)
-          TARGET_TAG=${LATEST_STABLE_TAG:-v3.4.2}
+          # 配置 Kconfig 与 Makefile 引用
+          if ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Makefile"; then
+            echo 'obj-$(CONFIG_KSU) += ksu/' >> "$KERNEL_ROOT/drivers/Makefile"
+          fi
+          if ! grep -q "CONFIG_KSU" "$KERNEL_ROOT/drivers/Kconfig"; then
+            sed -i '/endmenu/i source "drivers/ksu/Kconfig"' "$KERNEL_ROOT/drivers/Kconfig"
+          fi
 
-          echo "Checkout KernelSU-Next Tag: $TARGET_TAG"
-          git checkout $TARGET_TAG
+          echo "KernelSU-Next ($TARGET_TAG) 已成功集成至内核驱动树！"
 
-          cd "$GITHUB_WORKSPACE"
-
+      # 4. 应用 SUSFS 补丁
       - name: Apply SUSFS Patches
         run: |
           echo "Applying SUSFS patches..."
-          # 保留你原本的 SUSFS 补丁命令
+          # 此处放置你原本的 SUSFS 打补丁脚本命令
 
+      # 5. 编译内核
       - name: Compile Kernel
         run: |
           echo "Compiling Kernel..."
-          # 保留你原本的 Pixel 9 Pro XL / GKI 编译命令
+          # 此处放置你原本的 Pixel 9 Pro XL GKI 内核编译命令
 
+      # 6. 上传内核产物
       - name: Upload Kernel Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Pixel9ProXL-Kernel-KSU-Stable
-          path: out/arch/arm64/boot/Image.lz4 # 根据你原先打包成功的实际产物路径填写
+          path: out/arch/arm64/boot/Image.lz4 # 替换为你实际编译产物的路径
